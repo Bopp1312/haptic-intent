@@ -12,21 +12,31 @@ from geometry_msgs.msg import Point
 from geometry_msgs.msg import Vector3
 from geometry_msgs.msg import TransformStamped
 from std_msgs.msg import Float32MultiArray
-
+from std_msgs.msg import Int64MultiArray
 
 class marker:
     def __init__(self):
         # Subscribe to all markers from vicon
-        rospy.Subscriber("/vicon/finger/finger", TransformStamped, self.callback, queue_size=1)
+        rospy.Subscriber("/vicon/finger/1", TransformStamped, self.sensor_cb_1, queue_size=1)
+        rospy.Subscriber("/vicon/finger/2", TransformStamped, self.sensor_cb_2, queue_size=1)
+        rospy.Subscriber("/vicon/finger/3", TransformStamped, self.sensor_cb_3, queue_size=1)
+
+        rospy.Subscriber("/vicon/target", TransformedStamped, self.target_cb, queue_size=1)
 
         self.actuator_pub = rospy.Publisher("human/actuator", Float32MultiArray, queue_size=1)
+        self.doppler_pub = rospy.Publisher("human/doppler", Int64MultiArray, queue_size=1)
+
         self.debug_sensor_pub = rospy.Publisher("debug/sensor/position", Vector3, queue_size=1)
 
         rospy.loginfo("Initialized")
 
         self.rosRate = rospy.Rate(60)
 
-        self.sensor = np.zeros((3, 1))
+        self.sensor_1 = np.zeros((3, 1))
+        self.sensor_2 = np.zeros((3, 1))
+        self.sensor_3 = np.zeros((3, 1))
+
+        # Initialize goal
         self.goal = np.zeros((3, 1))
         self.goal[0] = 0.2
         self.goal[1] = 0.04
@@ -88,6 +98,26 @@ class marker:
         rospy.loginfo("Distance start: " + str(norm))
         self.isFirst = False
 
+    def target_cb(self, data):
+       self.goal[0] = data.transform.translation.x
+       self.goal[1] = data.transform.translation.y
+       self.goal[2] = data.transform.translation.z 
+
+    def sensor_cb_1(self, data):
+        self.sensor_1[0] = data.transform.translation.x
+        self.sensor_1[1] = data.transform.translation.y
+        self.sensor_1[2] = data.transform.translation.z
+
+    def sensor_cb_2(self, data):
+        self.sensor_2[0] = data.transform.translation.x
+        self.sensor_2[1] = data.transform.translation.y
+        self.sensor_2[2] = data.transform.translation.z
+
+    def sensor_cb_3(self, data):
+        self.sensor_3[0] = data.transform.translation.x
+        self.sensor_3[1] = data.transform.translation.y
+        self.sensor_3[2] = data.transform.translation.z
+
     def vector3ToNumpy(self, vec):
         return np.array([[vec.x], [vec.y], [vec.z]])
 
@@ -103,10 +133,32 @@ class marker:
         #self.texture_hot_cold()
         #self.binary_hot_cold()
         #self.cartesian_detents(10)
-        self.periodic_detents()
-        msg = Float32MultiArray()
-        msg.data = self.actuator_states 
-        self.actuator_pub.publish(msg)
+        #self.periodic_detents()
+        self.doppler()
+        #msg = Float32MultiArray()
+        #msg.data = self.actuator_states 
+        #self.actuator_pub.publish(msg)
+    
+    def doppler(self):
+        wave_velocity = 100 # m/s
+
+        # Calculate distance to target
+        dist_1 = np.linalg.norm(self.goal - self.sensor_1)
+        dist_2 = np.linalg.norm(self.goal - self.sensor_2)
+        dist_3 = np.linalg.norm(self.goal - self.sensor_3)
+
+        # Calculate time to target for wave
+        time_1 = dist_1/wave_velocity
+        time_2 = dist_2/wave_velocity
+        time_3 = dist_3/wave_velocity
+
+        time_us_1 = int(time_1*10**6)
+        time_us_2 = int(time_2*10**6)
+        time_us_3 = int(time_3*10**6)
+
+        msg = Int64MultiArray()
+        msg.data = [time_us_1, time_us_2, time_us_3]
+        self.doppler_pub(msg)
 
     def clip(self, input, min, max):
         if input > max:
