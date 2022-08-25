@@ -82,7 +82,7 @@ class marker:
             self.rosRate.sleep()
             # rospy.loginfo("Here")
 
-    def callback(self, data):
+    def callback(self, data)
         self.sensor[0] = data.transform.translation.x
         self.sensor[1] = data.transform.translation.y
         self.sensor[2] = data.transform.translation.z
